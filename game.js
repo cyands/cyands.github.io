@@ -28,7 +28,7 @@
 
   let snake;
   let food;
-  let enemy;
+  let enemies;
   let direction;
   let queuedDirection;
   let score;
@@ -37,6 +37,7 @@
   let paused = false;
   let gameTimer = null;
   let enemyTimer = null;
+  let spawnTimer = null;
 
   function readHighScore() {
     try { return Number.parseInt(localStorage.getItem('cyands-worm-high-score') || '0', 10); } catch { return 0; }
@@ -52,7 +53,7 @@
     queuedDirection = { ...direction };
     score = 0;
     food = { x: 17, y: 8 };
-    enemy = { x: 5, y: 5, direction: { ...directionMap.down } };
+    enemies = [{ x: 5, y: 5, direction: { ...directionMap.down } }];
     updateHud();
     render();
   }
@@ -83,7 +84,7 @@
     for (let y = 0; y < rows; y += 1) {
       for (let x = 0; x < cols; x += 1) {
         const point = { x, y };
-        if (!snake.some((part) => isSamePosition(part, point)) && !isSamePosition(enemy, point)) free.push(point);
+        if (!snake.some((part) => isSamePosition(part, point)) && !enemies.some((enemy) => isSamePosition(enemy, point))) free.push(point);
       }
     }
     return free[Math.floor(Math.random() * free.length)] || { x: 17, y: 8 };
@@ -99,13 +100,16 @@
     pauseButton.disabled = false;
     gameTimer = window.setInterval(tick, 140);
     enemyTimer = window.setInterval(moveEnemy, 1000);
+    spawnTimer = window.setInterval(spawnEnemy, 10000);
   }
 
   function stopTimers() {
     if (gameTimer !== null) window.clearInterval(gameTimer);
     if (enemyTimer !== null) window.clearInterval(enemyTimer);
+    if (spawnTimer !== null) window.clearInterval(spawnTimer);
     gameTimer = null;
     enemyTimer = null;
+    spawnTimer = null;
   }
 
   function gameOver(reason) {
@@ -132,7 +136,7 @@
     direction = { ...queuedDirection };
     const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
     if (head.x < 0 || head.x >= cols || head.y < 0 || head.y >= rows) return gameOver('벽에 부딪혔습니다.');
-    if (snake.some((part) => isSamePosition(part, head)) || isSamePosition(enemy, head)) return gameOver('충돌했습니다.');
+    if (snake.some((part) => isSamePosition(part, head)) || enemies.some((enemy) => isSamePosition(enemy, head))) return gameOver('충돌했습니다.');
     snake.unshift(head);
     if (isSamePosition(head, food)) {
       score += 10;
@@ -142,19 +146,33 @@
     render();
   }
 
-  function moveEnemy() {
-    if (!running || paused) return;
-    const choices = Object.values(directionMap).filter((candidate) => !isReverseForEnemy(candidate));
-    const candidate = choices[Math.floor(Math.random() * choices.length)];
-    const next = { x: enemy.x + candidate.x, y: enemy.y + candidate.y };
-    if (next.x < 0 || next.x >= cols || next.y < 0 || next.y >= rows) return;
-    enemy = { x: next.x, y: next.y, direction: { ...candidate } };
-    if (snake.some((part) => isSamePosition(part, enemy))) gameOver('적과 부딪혔습니다.');
+  function spawnEnemy() {
+    if (!running || paused || enemies.length >= 10) return;
+    const point = randomFreeCell();
+    enemies.push({ x: point.x, y: point.y, direction: { ...directionMap.down } });
+    setMessage(`적 ${enemies.length}/10개가 활동 중입니다.`);
     render();
   }
 
-  function isReverseForEnemy(candidate) {
-    return enemy.direction && candidate.x === -enemy.direction.x && candidate.y === -enemy.direction.y;
+  function moveEnemy() {
+    if (!running || paused) return;
+    const occupied = enemies.map((enemy) => ({ x: enemy.x, y: enemy.y }));
+    enemies = enemies.map((enemy, index) => {
+      const choices = Object.values(directionMap).filter((candidate) => !isReverseForEnemy(candidate, enemy.direction));
+      const shuffled = choices.sort(() => Math.random() - .5);
+      const candidate = shuffled.find((option) => {
+        const next = { x: enemy.x + option.x, y: enemy.y + option.y };
+        return next.x >= 0 && next.x < cols && next.y >= 0 && next.y < rows && !occupied.some((point, pointIndex) => pointIndex !== index && isSamePosition(point, next));
+      });
+      if (!candidate) return enemy;
+      return { x: enemy.x + candidate.x, y: enemy.y + candidate.y, direction: { ...candidate } };
+    });
+    if (enemies.some((enemy) => snake.some((part) => isSamePosition(part, enemy)))) gameOver('적과 부딪혔습니다.');
+    render();
+  }
+
+  function isReverseForEnemy(candidate, currentDirection) {
+    return currentDirection && candidate.x === -currentDirection.x && candidate.y === -currentDirection.y;
   }
 
   function drawCell(point, color) {
@@ -169,7 +187,7 @@
     for (let x = 0; x <= cols; x += 1) { context.beginPath(); context.moveTo(x * cell, 0); context.lineTo(x * cell, canvas.height); context.stroke(); }
     for (let y = 0; y <= rows; y += 1) { context.beginPath(); context.moveTo(0, y * cell); context.lineTo(canvas.width, y * cell); context.stroke(); }
     drawCell(food, '#39ff14');
-    drawCell(enemy, '#ff6b6b');
+    enemies.forEach((enemy) => drawCell(enemy, '#ff8da1'));
     snake.forEach((part, index) => drawCell(part, index === 0 ? '#b8ffb8' : '#6fa86f'));
   }
 
