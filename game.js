@@ -100,7 +100,7 @@
     pauseButton.disabled = false;
     gameTimer = window.setInterval(tick, 140);
     enemyTimer = window.setInterval(moveEnemy, 1000);
-    spawnTimer = window.setInterval(spawnEnemy, 10000);
+    spawnTimer = window.setInterval(spawnEnemy, 5000);
   }
 
   function stopTimers() {
